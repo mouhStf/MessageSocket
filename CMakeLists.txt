@@ -17,6 +17,7 @@ qt_add_executable(messagesocket
   main.cpp
   socket.h
   socket.cpp
+  watcher.h
 )
 
 qt_add_qml_module(messagesocket

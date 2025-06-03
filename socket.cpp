@@ -1,33 +1,16 @@
 #include "socket.h"
-#include <cassert>
-#include <qabstractsocket.h>
-#include <qbuffer.h>
-#include <qdebug.h>
-#include <qjsondocument.h>
-#include <qjsonobject.h>
-#include <qlogging.h>
-#include <qobject.h>
-#include <qstringview.h>
-#include <qtcpsocket.h>
-#include <qtypes.h>
 
 const qint64 MAX_SOCKET_WRITE_BUFFER_SIZE = 4096;
 const qint64 MSWBS = MAX_SOCKET_WRITE_BUFFER_SIZE;
 
-Socket::Socket(QTcpSocket* socket, QObject *parent) : QObject{parent} {
-  this->socket = nullptr;
-  idx = 0;
-  gi = false;
-  fm = false;  
-  _size = sizeof(qint64);
-
+Socket::Socket(QTcpSocket* socket, QObject *parent) : QObject{parent} , socket{nullptr}, _connected{false} {  
   if (socket == nullptr)
     setSocket(new QTcpSocket);
-  initBuffers();
+  else
+    setSocket(socket);
 }
 
 void Socket::setSocket(QTcpSocket* _socket) {
-  
   if (this->socket != nullptr) {
     if (this->socket->state() == QTcpSocket::ConnectedState)
       this->socket->disconnectFromHost();
@@ -41,19 +24,30 @@ void Socket::setSocket(QTcpSocket* _socket) {
   connect(socket, &QTcpSocket::readyRead, this, &Socket::inF);
   connect(socket, &QTcpSocket::bytesWritten, this, &Socket::bh);
 
+  if (socket->state() == QTcpSocket::ConnectedState) {
+    _connected = true;
+    emit connectedChanged(_connected);
+  }
+
   connect(socket, &QTcpSocket::stateChanged, this, [&](QTcpSocket::SocketState st) {
     if (st == QTcpSocket::ConnectedState) {
       qDebug() << "Connected";
+      _connected = true;
+      emit connectedChanged(_connected);
     }
   });
 
-  connect(socket, &QTcpSocket::disconnected, []() {
+  connect(socket, &QTcpSocket::disconnected, this, [&]() {
     qDebug() << "Disconnected";
+    _connected = false;
+    emit connectedChanged(_connected);
   });
-}
 
-void Socket::initBuffers() {
-  bufw.open(QIODevice::WriteOnly);
+  idx = 0;
+  gi = false;
+  fm = false;  
+  _size = sizeof(qint64);
+    bufw.open(QIODevice::WriteOnly);
   _sttw.setDevice(&bufw);
 
   hb = new QBuffer;
@@ -99,7 +93,8 @@ void Socket::inF() {
         qDebug() << "file list" << fns;
       }
       if (fns.empty()) {
-        qDebug() << "Done" << message << files;
+        emit received(message, files);
+        files.clear();
       }
 
       if (srd != hb) srd = hb;      
