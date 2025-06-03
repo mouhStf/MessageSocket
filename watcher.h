@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QtNetwork>
+#include <qhostaddress.h>
 #include <qstringview.h>
 #include <qtmetamacros.h>
 #include "socket.h"
@@ -14,11 +15,6 @@ class Watcher : public QObject {
 
 public:
   Watcher() : _connected{false}, server{false} {
-
-    auto doConnections = [&](){
-      
-    };
-    
     connect(&srv, &QTcpServer::newConnection, this, [&]() {
       socket = new Socket(srv.nextPendingConnection());
       connect(socket, &Socket::connectedChanged, this,[&](bool con) {
@@ -32,10 +28,21 @@ public:
         _connected = true;
         emit connectedChanged(_connected);
       }
-    });
+    });    
+  }
+  
+  bool connected() { return _connected; }
+  bool isServer() { return server; }
 
-    server = srv.listen(QHostAddress::Any, 8094);
+public slots:
+  void serv(int port) {
+    server = srv.listen(QHostAddress::Any, port);
     emit serverChanged(server);
+  }
+  void sendMessage(const QString &messageString, const QList<QUrl> &fileNames) {
+    socket->sendMessage(messageString, fileNames);
+  }
+  void connectToSrv(const QString host, int port) {    
     if (!server) {
       socket = new Socket;
       connect(socket, &Socket::connectedChanged, this,[&](bool con) {
@@ -43,19 +50,10 @@ public:
         emit connectedChanged(con);
       });
       connect(socket, &Socket::received, this, &Watcher::gotMessage);
-    }
-  }
-  
-  bool connected() { return _connected; }
-  bool isServer() { return server; }
-
-public slots:
-  void sendMessage(const QString &messageString, const QList<QUrl> &fileNames) {
-    socket->sendMessage(messageString, fileNames);
-  }
-
-  void connectToSrv() {
-    socket->doConnect("127.0.0.1", 8094);
+          
+      socket->doConnect(host, port);
+    } else
+      qDebug() << "Cannot connect while serving";
   }
 
 signals:

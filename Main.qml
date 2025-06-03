@@ -139,18 +139,36 @@ ApplicationWindow {
               color: wtch.connected ? "green" : "red"
             }
             Label {
-              text: (wtch.server ? "Server - " : "") + (wtch.connected ? "Connected" : "Diconnected")
+              text: (wtch.server ? "Serving - " : "") + (wtch.connected ? "Connected" : "Diconnected")
             }
             Rectangle {
               color: "black"
               Layout.preferredWidth: 1
               Layout.fillHeight: true
             }
+            TextField {
+              id: host
+              placeholderText: "Host"
+              Layout.preferredWidth: 110
+            }
+            TextField {
+              id: port
+              placeholderText: "Port"
+              Layout.preferredWidth: 50
+              validator: IntValidator {
+              }
+            }
             ToolButton {
               text: "Connect"
               enabled: !wtch.connected && !wtch.server
               onClicked: function() {
-                wtch.connectToSrv();
+                wtch.connectToSrv(host.text, port.text);
+              }
+            }
+            ToolButton {
+              text: "Serv"
+              onClicked: function() {
+                wtch.serv(port.text);
               }
             }
             Item {
