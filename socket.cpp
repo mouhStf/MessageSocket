@@ -1,174 +1,245 @@
 #include "socket.h"
+#include <qdebug.h>
+#include <qfileinfo.h>
+#include <qlogging.h>
+#include <qobject.h>
+#include <qtcpsocket.h>
 
 const qint64 MAX_SOCKET_WRITE_BUFFER_SIZE = 4096;
 const qint64 MSWBS = MAX_SOCKET_WRITE_BUFFER_SIZE;
 
-Socket::Socket(QTcpSocket* socket, QObject *parent) : QObject{parent} , socket{nullptr}, _connected{false} {  
-  if (socket == nullptr)
-    setSocket(new QTcpSocket);
-  else
-    setSocket(socket);
+Socket::Socket(QTcpSocket* socket, QObject *parent) : QObject{parent} ,
+                                                      messageSocket{nullptr},
+                                                      fileSocket{nullptr},
+                                                      sr{&mr},
+                                                      sfr{&fr},
+                                                      writtingMessage{false},
+                                                      writtingFile{false},
+                                                      msw{&mts},
+                                                      fsw{&fts}
+{
+  mr.open(QIODevice::ReadWrite);
+  fr.open(QIODevice::ReadWrite);
+  //messageReader.open(QIODevice::ReadWrite);
+  mts.open(QIODevice::ReadWrite);
+  fts.open(QIODevice::ReadWrite);
+
+  frd = &fr;
 }
 
-void Socket::setSocket(QTcpSocket* _socket) {
-  if (this->socket != nullptr) {
-    if (this->socket->state() == QTcpSocket::ConnectedState)
-      this->socket->disconnectFromHost();
+void Socket::disconnectMessageSocket() {
+  if (messageSocket != nullptr && messageSocket->state() == QTcpSocket::ConnectedState)
+  messageSocket->disconnectFromHost();
+}
 
-    this->socket->disconnect();
-    this->socket->deleteLater();
+void Socket::disconnectFileSocket() {
+  if (fileSocket != nullptr && fileSocket->state() == QTcpSocket::ConnectedState)
+  fileSocket->disconnectFromHost();
+}
+
+void Socket::connectMessageSocket(const QHostAddress &address, quint16 port, QIODevice::OpenMode mode) {
+  messageSocket->connectToHost(address, port, mode);
+}
+
+void Socket::connectFileSocket(const QHostAddress &address, quint16 port, QIODevice::OpenMode mode) {
+  fileSocket->connectToHost(address, port, mode);
+}
+
+void Socket::setMessageSocket(QTcpSocket* socket) {
+  if (socket == nullptr || socket == messageSocket) return;
+  if (messageSocket != nullptr) {
+    if (messageSocket->state() == QTcpSocket::ConnectedState)
+      messageSocket->disconnectFromHost();
+    messageSocket->disconnect();
+    messageSocket->deleteLater();
   }
+  messageSocket = socket;
 
-  this->socket = _socket;
+  connect(messageSocket, &QTcpSocket::readyRead,
+          this, &Socket::messageIn);
+  connect(messageSocket, &QTcpSocket::bytesWritten,
+          this, &Socket::writeMessageSocket);
+  connect(messageSocket, &QTcpSocket::disconnected,
+          this, &Socket::messageSocketDisconnected);
 
-  connect(socket, &QTcpSocket::readyRead, this, &Socket::inF);
-  connect(socket, &QTcpSocket::bytesWritten, this, &Socket::bh);
+  msr = true;
+  msz = sizeof(qint64);
+}
 
-  if (socket->state() == QTcpSocket::ConnectedState) {
-    _connected = true;
-    emit connectedChanged(_connected);
+void Socket::setFileSocket(QTcpSocket* socket) {
+  if (socket == nullptr || socket == fileSocket) return;
+  if (fileSocket != nullptr) {
+    if (fileSocket->state() == QTcpSocket::ConnectedState)
+      fileSocket->disconnectFromHost();
+    fileSocket->disconnect();
+    fileSocket->deleteLater();
   }
+  fileSocket = socket;
 
-  connect(socket, &QTcpSocket::stateChanged, this, [&](QTcpSocket::SocketState st) {
-    if (st == QTcpSocket::ConnectedState) {
-      qDebug() << "Connected";
-      _connected = true;
-      emit connectedChanged(_connected);
+  connect(fileSocket, &QTcpSocket::readyRead,
+          this, &Socket::fileIn);
+  connect(fileSocket, &QTcpSocket::bytesWritten,
+          this, &Socket::writeFileSocket);
+  connect(fileSocket, &QTcpSocket::disconnected,
+          this, &Socket::fileSocketDisconnected);
+  fsr = 0;
+  fsz = sizeof(qint64);
+}
+
+void Socket::messageSocketDisconnected() {
+  
+}
+void Socket::fileSocketDisconnected(){}
+
+void Socket::messageIn() {
+  mr.write(messageSocket->read(msz - mr.size()));
+  if (mr.size() >= msz) {
+    mr.seek(0);
+    if (msr) {
+      sr >> msz;
+    } else {
+      message = mr.buffer();
+      msz = sizeof(qint64);
+      emit receivedMessage(message);
     }
-  });
-
-  connect(socket, &QTcpSocket::disconnected, this, [&]() {
-    qDebug() << "Disconnected";
-    _connected = false;
-    emit connectedChanged(_connected);
-  });
-
-  idx = 0;
-  gi = false;
-  fm = false;  
-  _size = sizeof(qint64);
-    bufw.open(QIODevice::WriteOnly);
-  _sttw.setDevice(&bufw);
-
-  hb = new QBuffer;
-  hb->open(QIODevice::ReadWrite);
-  szr.setDevice(hb);
-  fb = new QFile;
-
-  srd = hb;
+    mr.buffer().clear();
+    mr.seek(0);
+    msr = !msr;
+  }
+  if (messageSocket->bytesAvailable()) messageIn();
 }
 
-void Socket::inF() {
-  srd->write(socket->read(_size - srd->size()));
+void Socket::fileIn() {
+  frd->write(fileSocket->read(fsz - frd->size()));
 
-  if (srd->size() >= _size) {
-    srd->seek(0);
-    switch (idx) {
+  if (fsr == 3)
+    emit receivingFile(rfileName, fsz, frd->size());
+  
+  if (frd->size() >= fsz) {
+    frd->seek(0);
+    QFileInfo inf;
+    QDir dir;
+    QString base, suffix;
+    int fileNum(1);
+    switch (fsr) {
     case 0:
-      szr >> _size;
-      hb->buffer().clear();
-      hb->seek(0);
-
-      fm = !fns.empty();
-      if (fm) {
-        files.append(fns.takeFirst());
-        fb->setFileName(files.last());
-        qDebug() << "Opened file" << fb->open(QIODevice::WriteOnly);
-        srd = fb;
-      } 
-      idx = 1;
-
+      sfr >> fsz;
+      fsr += 1;
       break;
     case 1:
-      if (fm) {
-        qDebug() << "Done writing file" << fb->fileName();
-        fb->close();
-      } else {
-        QList<QByteArray> ps = hb->buffer().split(0x1F);
-        hb->buffer().clear();
-        hb->seek(0);
-        message = ps.takeFirst();
-        fns = ps;
-        qDebug() << "Got message:" << message;
-        qDebug() << "file list" << fns;
-      }
-      if (fns.empty()) {
-        emit received(message, files);
-        files.clear();
-      }
-
-      if (srd != hb) srd = hb;      
-      _size = sizeof(qint64);
-      idx = 0;
+      inf.setFile(fr.buffer());
+      dir = inf.dir();
+      base = inf.baseName();
+      suffix = inf.completeSuffix();
+      while (inf.exists())
+        inf.setFile(dir.filePath(base + " ("+QString::number(fileNum++)+")" + suffix));
+      inf.filePath();
+      fs.setFileName(inf.filePath());
+      rfileName = inf.fileName();
+      fs.open(QIODevice::ReadWrite);
+      fsz = sizeof(qint64);
+      fsr = 2;
+      break;
+    case 2:
+      sfr >> fsz;
+      fsr += 1;
+      frd = &fs;
+      break;
+    case 3:
+      fs.close();      
+      emit receivedFile(QUrl::fromLocalFile(fs.fileName()));
+      fsz = sizeof(qint64);
+      fsr = 0;
+      frd = &fr;
       break;
     }
+    if (fsr < 3) {
+      fr.buffer().clear();
+      fr.seek(0);
+    }
   }
-
-  if (socket->bytesAvailable()) inF();
+  if (fileSocket->bytesAvailable()) fileIn();
 }
 
-void Socket::doConnect(QString addr, int port) {
-  qDebug() << "Connecting to" << addr << port;
-  socket->connectToHost(addr, port);
+void Socket::sendMessage(const QByteArray &mess) {
+  messageQueue.append(mess);
+  writeMessageSocket();
 }
 
-void Socket::sendMessage(const QString &messageString, const QList<QUrl> &fileNames) {
-  QPair<QString, QList<QUrl>> el(messageString, fileNames);
-  queue.append(el);
-  bh();
+bool Socket::nextM() {
+  if (messageQueue.isEmpty()) return false;
+  messageReader.setBuffer(&messageQueue[0]);
+  messageReader.open(QIODevice::ReadOnly);
+  msw << (qint64)messageQueue[0].length();
+  return true; 
 }
 
-void Socket::bh() {
-  if (socket->bytesToWrite() > 0) return;
+void Socket::writeMessageSocket() {
+  if (messageSocket->bytesToWrite() > 0) return;
+  if (writtingMessage) return;
+  writtingMessage = true;
   
-  if (!gi) {
-    bufq.clear();
-    bidx = -1;
-
-    if (queue.isEmpty()) return;
-
-    QSharedPointer<QIODevice> bfs(new QBuffer);
-
-    bfs->open(QIODevice::ReadWrite);
-    bfs->write(queue[0].first.toLocal8Bit());
-
-    bufq.append(bfs);
-    
-    for (const QUrl &url : queue[0].second) {
-      bfs->write(0x1F + url.fileName().toLocal8Bit());
-      QSharedPointer<QIODevice> f(new QFile(url.toLocalFile()));
-      if (f->open(QIODevice::ReadOnly))
-        bufq.append(f);
-      else
-        qDebug() << "Could not open" << url;
+  while(mts.size() < MSWBS) {
+    if (!messageReader.isOpen() || messageReader.atEnd()) {
+      if (messageReader.isOpen() && messageReader.atEnd()) {        
+        messageReader.close();
+        messageQueue.removeFirst();
+      }
+      if (!nextM()) break;
+    } else {
+      mts.write(messageReader.read(MSWBS - mts.size()));
     }
-    bfs->seek(0);
-    gi = true;
   }
 
-  gh();
+  if (mts.size() > 0) {
+    messageSocket->write(mts.buffer());
+    mts.buffer().clear(); mts.seek(0);
+  }
+  writtingMessage = false;
 }
 
-void Socket::gh() {
+void Socket::sendFile(const QUrl &url) {
+  if (url == QUrl()) return;
+  fileQueue.append(url);
+  writeFileSocket();
+}
 
-  while (bufw.size() < MSWBS) {
-    if (bidx == -1 || bufq[bidx]->atEnd()) {
-      if (bidx > -1) bufq[idx]->close();
-      if (++bidx < bufq.size()) {
-        _sttw << (qint64)bufq[bidx]->size();
-      } else {
-        queue.removeAt(0);
-        gi = false;
-        break;
+bool Socket::nextF() {
+  if (fileQueue.isEmpty()) return false;
+  fileToSend.setFileName(fileQueue[0].toLocalFile());
+  if (fileToSend.open(QIODevice::ReadWrite)) {
+    sfileName = fileQueue[0].fileName();
+    fsw << sfileName.toLocal8Bit().size();
+    fts.write(sfileName.toLocal8Bit());
+    fileSize = fileToSend.size();
+    fsw << (qint64)fileSize;
+    sentSize = -fts.size();
+    return true;
+  } else return nextF();
+}
+
+void Socket::writeFileSocket() {
+  if (fileSocket->bytesToWrite() > 0) return;
+  if (writtingFile) return;
+  writtingFile = true;
+
+  while (fts.size() < MSWBS) {
+    if (!fileToSend.isOpen() || fileToSend.atEnd()) {
+      if (fileToSend.isOpen() && fileToSend.atEnd()) {
+        fileToSend.close();
+        fileQueue.removeFirst();
       }
-    } else {
-      bufw.write(bufq[bidx]->read(MSWBS - bufw.size()));
-    }
+      if (!nextF()) break;
+    } else
+      fts.write(fileToSend.read(MSWBS - fts.size()));
   }
 
-  if (bufw.size() > 0) {
-    socket->write(bufw.buffer());
-    bufw.buffer().clear();
-    bufw.seek(0);
+  if (fts.size() > 0) {
+    fileSocket->write(fts.buffer());
+    sentSize += fts.size();
+    if (sentSize > 0)
+    emit sendingFile(sfileName, fileSize, sentSize);
+    fts.buffer().clear(); fts.seek(0);
   }
+  writtingFile = false;
 }

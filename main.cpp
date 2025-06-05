@@ -10,6 +10,8 @@ int main(int argc, char *argv[]) {
 
   QQmlApplicationEngine engine;
 
+  Watcher watcher;
+  
   qmlRegisterType<Watcher>("imps", 1, 0, "Watcher");
 
   QObject::connect(&engine,&QQmlApplicationEngine::objectCreationFailed,

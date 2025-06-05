@@ -12,192 +12,263 @@ ApplicationWindow {
   visible: true
   title: "MessageSocket"
   id: window
-
+  
   Watcher {
     id: wtch
-    onGotMessage: function(message, fileNames) {
-      console.log("Received", message, fileNames);
-      var fns = "";
-      if (fileNames.length > 0) {
-        fns = " -- files: [";
-        for (var i = 0; i < fileNames.length; i++)
-          fns += fileNames[i] + "-";
-        fns += "]";
-      }
-      messages.append({message: message + fns});
+    onReceivedMessage: function(message) {
+      messages.append({message: message});
       messageList.positionViewAtEnd();
     }
+    onSendingFile: function (name, tot, don) {
+      if (don !== tot)
+        sendI.text = ~~((don / tot) * 100) + "% " + name
+      else
+        sendI.text = ""
+    }
+    onReceivingFile: function (name, tot, don) {
+      recvF.text = ~~((don / tot) * 100) + "% " + name
+    }
+    onReceivedFile: function(filePath) {
+      recvF.text = "";
+      var parts = filePath.toString().split("/");
+      rfiles.append({
+        src: filePath,
+        name: decodeURI(parts[parts.length-1])
+      })
+    }
+  }
+  
+  ListModel {
+    id: files
+  }
+  ListModel {
+    id: messages
+  }
+  ListModel {
+    id: rfiles
   }
 
-  StackLayout {
+      
+  Frame {
     anchors.fill: parent
-    currentIndex: bar.currentIndex
-
-    ListModel {
-      id: files
-    }
-    ListModel {
-      id: messages
-    }
-    
-    Frame {
-      ColumnLayout {
-        anchors.fill: parent
-        RowLayout {
-          Frame {
-            clip: true
-            Layout.fillHeight: true
-            Layout.preferredWidth: 150
-            ColumnLayout {
-              anchors.fill: parent
-              Label {
-                text: "Choosed files : " + files.count
-              }
-
-              ListView {
-                Layout.fillHeight: true
-                Layout.fillWidth: true
-                model: files
-                delegate: Item {
-                  id: it
-                  required property url src;
-                  required property string name;
-                  required property int index;
-                  height: lay.height
-                  RowLayout {
-                    id: lay
-                    Label {
-                      text: "X"
-                      MouseArea {
-                        anchors.fill: parent
-                        onClicked: function() {
-                          files.remove(it.index);
-                        }
+    ColumnLayout {
+      anchors.fill: parent
+      RowLayout {
+        Frame {
+          clip: true
+          Layout.fillHeight: true
+          Layout.preferredWidth: 150
+          ColumnLayout {
+            anchors.fill: parent
+            Label {
+              text: "Choosed files : " + files.count
+            }
+            ListView {
+              Layout.fillHeight: true
+              Layout.fillWidth: true
+              clip: true
+              model: files
+              delegate: Item {
+                id: it
+                required property url src;
+                required property string name;
+                required property int index;
+                height: lay.height
+                RowLayout {
+                  id: lay
+                  Label {
+                    text: "X"
+                    MouseArea {
+                      anchors.fill: parent
+                      onClicked: function() {
+                        files.remove(it.index);
                       }
                     }
-                    Text {                      
-                      text: it.name
-                    }
+                  }
+                  Text {                      
+                    text: it.name
                   }
                 }
               }
-              
-              Button {
+            }
+            Label {
+              id: sendI
+              visible: text !== ""
+            }
+            RowLayout {
+              ToolButton {
                 text: "+ Add files"
                 onClicked: fileDialog.open()
               }
+              ToolButton {
+                text: "Send"
+                enabled: wtch.fileSocketState === 3
+                onClicked: function() {
+                  for (var i = 0; i < files.count; i++) {
+                    wtch.sendFile(files.get(i).src);                  
+                  }
+                }
+              }
+            }
+            Label {
+              text: "Received files : " + rfiles.count
+            }
+            Label {
+              id: recvF
+              visible: text !== ""
+            }
+            ListView {
+              clip: true
+              Layout.fillHeight: true
+              Layout.fillWidth: true
+              model: rfiles
+              delegate: Text {
+                required property string name
+                required property string src
+                text: name
+              }
             }
           }
-          Frame {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-
-            ColumnLayout {
-              anchors.fill: parent
-
-              TextArea {
-                id: textArea
-                Layout.fillWidth: true
-                Layout.preferredHeight: parent.height / 2
+        }
+        Frame {
+          Layout.fillWidth: true
+          Layout.fillHeight: true
+          
+          ColumnLayout {
+            anchors.fill: parent
+            
+            TextArea {
+              id: textArea
+              Layout.fillWidth: true
+              Layout.preferredHeight: parent.height / 2
+              
+              ToolButton {
+                text: "Send"
+                anchors{
+                  bottom: parent.bottom
+                  right: parent.right
+                  margins: 5
+                }
+                enabled: wtch.messageSocketState === 3
+                onClicked: function() {
+                  wtch.sendMessage(textArea.text);
+                }
               }
-              Frame {
-                Layout.fillWidth: true
-                Layout.preferredHeight: parent.height / 2
-                ColumnLayout {
-                  anchors.fill: parent
-                  Label {
-                    id: mess
-                    text: "Received messages :"
+            }
+            Frame {
+              Layout.fillWidth: true
+              Layout.preferredHeight: parent.height / 2
+              ColumnLayout {
+                anchors.fill: parent
+                Label {
+                  id: mess
+                  text: "Received messages :"
+                }
+                ListView {
+                  Layout.fillHeight: true
+                  Layout.fillWidth: true
+                  id: messageList
+                  clip: true
+                  model: messages
+                  delegate: Text {
+                    required property string message;
+                    wrapMode: Text.Wrap
+                    
+                    text: "-> " + message
                   }
-                  ListView {
-                    Layout.fillHeight: true
-                    Layout.fillWidth: true
-                    id: messageList
-                    clip: true
-                    model: messages
-                    delegate: Text {
-                      required property string message;
-                      wrapMode: Text.Wrap
-                      
-                      text: "-> " + message
-                    }
-                    ScrollBar.vertical: ScrollBar { }
-                  }
+                  ScrollBar.vertical: ScrollBar { }
                 }
               }
             }
           }
         }
-        ToolBar {
-          Layout.fillWidth: true
+      }
+      ToolBar {
+        Layout.fillWidth: true
+        RowLayout {
+          anchors.fill: parent
           RowLayout {
-            anchors.fill: parent
-            Rectangle {
-              Layout.preferredWidth: 10
-              Layout.preferredHeight: 10
-              radius: 5
-              color: wtch.connected ? "green" : "red"
-            }
-            Label {
-              text: (wtch.server ? "Serving - " : "") + (wtch.connected ? "Connected" : "Diconnected")
-            }
-            Rectangle {
-              color: "black"
-              Layout.preferredWidth: 1
-              Layout.fillHeight: true
-            }
-            TextField {
-              id: host
-              placeholderText: "Host"
-              Layout.preferredWidth: 110
-            }
-            TextField {
-              id: port
-              placeholderText: "Port"
-              Layout.preferredWidth: 50
-              validator: IntValidator {
+            RowLayout {
+              Rectangle {
+                Layout.preferredWidth: 10
+                Layout.preferredHeight: 10
+                radius: 5
+                color: wtch.listenning ? "green" : "red"
+              }
+              Label {
+                text: "Server"
               }
             }
-            ToolButton {
-              text: "Connect"
-              enabled: !wtch.connected && !wtch.server
-              onClicked: function() {
-                wtch.connectToSrv(host.text, port.text);
+            ColumnLayout {
+              RowLayout {
+                Rectangle {
+                  Layout.preferredWidth: 10
+                  Layout.preferredHeight: 10
+                  radius: 5
+                  color: wtch.messageSocketState === 3 ? "green" : "red"
+                }
+                Label {
+                  text: "Message"
+                }
               }
-            }
-            ToolButton {
-              text: "Serv"
-              onClicked: function() {
-                wtch.serv(port.text);
-              }
-            }
-            Item {
-              Layout.fillWidth: true
-              Layout.fillHeight: true
-            }
-            ToolButton {
-              text: "Send"
-              enabled: wtch.connected
-              onClicked: function() {
-                var urls = [];
-                for (var i = 0; i < files.count; i++)
-                  urls.push(files.get(i).src);                
-                wtch.sendMessage(textArea.text, urls);
+              RowLayout {
+                Rectangle {
+                  Layout.preferredWidth: 10
+                  Layout.preferredHeight: 10
+                  radius: 5
+                  color: wtch.fileSocketState ? "green" : "red"
+                }
+                Label {
+                  text: "File"
+                }
               }
             }
           }
+          Rectangle {
+            color: "black"
+            Layout.preferredWidth: 1
+            Layout.fillHeight: true
+          }
+          TextField {
+            id: host
+            placeholderText: "Host"
+            text: "127.0.0.1"
+            Layout.preferredWidth: 110
+          }
+          TextField {
+            id: port
+            placeholderText: "Port"
+            text: "8090"
+            Layout.preferredWidth: 50
+            validator: IntValidator {
+            }
+          }
+          ToolButton {
+            text: "Connect Message"
+            enabled: !wtch.listenning
+            onClicked: function() {
+              wtch.connectMessageSocket(host.text, port.text);
+            }
+          }
+          ToolButton {
+            text: "Connect File"
+            enabled: !wtch.listenning
+            onClicked: function() {
+              wtch.connectFileSocket(host.text, port.text);
+            }
+          }
+          ToolButton {
+            text: "Serv"
+            onClicked: function() {
+              wtch.listen(host.text, port.text);
+            }
+          }
+          Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+          }            
         }
       }
-    }
-  }
-
-  footer: TabBar {
-    id: bar
-    TabButton {
-      text: "Envoi"
-    }
-    TabButton {
-      text: "Reception"
     }
   }
 
@@ -221,7 +292,7 @@ ApplicationWindow {
           files.append({
             src: selectedFiles[i],
             name: parts[parts.length-1]
-          })
+          });
         }
       }
     }
