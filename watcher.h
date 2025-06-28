@@ -3,11 +3,6 @@
 
 #include <QObject>
 #include <QtNetwork>
-#include <qhash.h>
-#include <qhostaddress.h>
-#include <qstringview.h>
-#include <qtcpsocket.h>
-#include <qtmetamacros.h>
 #include "socket.h"
 
 class Watcher : public QObject {
@@ -18,7 +13,7 @@ class Watcher : public QObject {
   Q_PROPERTY(int fileSocketState READ fileSocketState NOTIFY fileSocketStateChanged)
 
 public:
-  Watcher();  
+  Watcher(QObject* parent = nullptr);
 
   bool isListenning();
   
@@ -28,10 +23,20 @@ public:
   int messageSocketState();
   int fileSocketState();
 
+  quint16 serverPort() const;
+  QHostAddress messageSocketPeerAddress() const;
+  QHostAddress fileSocketPeerAddress() const;
+
 public slots:
   void listen(const QByteArray &address, quint16 port);
+  void closeServer();
 
+  void connectMessageSocket(const QHostAddress &address, quint16 port, QIODevice::OpenMode mode = QIODevice::ReadWrite);
+  
   void connectMessageSocket(const QByteArray &address, quint16 port, QIODevice::OpenMode mode = QIODevice::ReadWrite);
+  
+  void connectFileSocket(const QHostAddress &address, quint16 port, QIODevice::OpenMode mode = QIODevice::ReadWrite);
+  
   void connectFileSocket(const QByteArray &address, quint16 port, QIODevice::OpenMode mode = QIODevice::ReadWrite);
 
   void sendMessage(const QByteArray &message) { socket.sendMessage(message); }
@@ -51,7 +56,7 @@ signals:
   void serverStateChanged(bool listenning);
   void messageSocketStateChanged(int state);
   void fileSocketStateChanged(int state);
-  void receivedMessage(const QString message);
+  void receivedMessage(const QByteArray message);
   void receivedFile(const QUrl filePath);
   void sendingFile(const QString &fileName, qint64 fileSize, qint64 sentSize);
   void receivingFile(const QString &fileName, qint64 fileSize, qint64 receivedSize);

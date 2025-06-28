@@ -11,7 +11,8 @@ const QByteArray FILSI = QByteArray::fromHex("1E2E3E4E");
 const QByteArray CONFIRMMESS = QByteArray::fromHex("1E2E3E4E");
 const QByteArray CONFIRMFIL = QByteArray::fromHex("1E2E3E4E");
 
-Watcher::Watcher() : messageSocket{nullptr}, fileSocket{nullptr} {
+Watcher::Watcher(QObject* parent) : QObject{parent}, messageSocket{nullptr},
+                                    fileSocket{nullptr} {
   connect(&server, &QTcpServer::newConnection,
           this, &Watcher::newConnection);
 
@@ -64,13 +65,28 @@ void Watcher::resetFileSocket(QTcpSocket* socket, bool server) {
   emit fileSocketStateChanged(fileSocket->state());
 }
 
-bool Watcher::isListenning() {
-  return server.isListening();
+bool Watcher::isListenning() { return server.isListening(); }
+
+QHostAddress Watcher::messageSocketPeerAddress() const {
+  return messageSocket->peerAddress();
+}
+
+QHostAddress Watcher::fileSocketPeerAddress() const {
+  return fileSocket->peerAddress();
+}
+
+quint16 Watcher::serverPort() const {
+  return server.serverPort();
 }
 
 void Watcher::listen(const QByteArray &address, quint16 port) {
   if (!server.isListening())
     emit serverStateChanged( server.listen(QHostAddress(address), port) );
+}
+
+void Watcher::closeServer() {
+  if (server.isListening())
+    server.close();
 }
 
 void Watcher::newConnection() {
@@ -105,11 +121,20 @@ void Watcher::socketIdentificator() {
   if (socket->bytesAvailable()) emit socket->readyRead();
 }
 
+void Watcher::connectMessageSocket(const QHostAddress &address, quint16 port, QIODevice::OpenMode mode) {
+  messageSocket->connectToHost(address, port, mode);
+}
+
 void Watcher::connectMessageSocket(const QByteArray &address, quint16 port, QIODevice::OpenMode mode) {
   messageSocket->connectToHost(QHostAddress(address), port, mode);
 }
+
 void Watcher::connectFileSocket(const QByteArray &address, quint16 port, QIODevice::OpenMode mode) {
   fileSocket->connectToHost(QHostAddress(address), port, mode);
+}
+
+void Watcher::connectFileSocket(const QHostAddress &address, quint16 port, QIODevice::OpenMode mode) {
+  fileSocket->connectToHost(address, port, mode);
 }
 
 void Watcher::setMessageSocket() {  

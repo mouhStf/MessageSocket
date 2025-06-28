@@ -20,7 +20,7 @@ public:
   Socket(QTcpSocket* socket = nullptr, QObject *parent = nullptr);
 
 signals:
-  void receivedMessage(const QString message);
+  void receivedMessage(const QByteArray message);
   void receivedFile(const QUrl filePath);
 
   void sendingFile(const QString &fileName, qint64 fileSize, qint64 sentSize);

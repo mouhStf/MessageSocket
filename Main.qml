@@ -16,7 +16,10 @@ ApplicationWindow {
   Watcher {
     id: wtch
     onReceivedMessage: function(message) {
-      messages.append({message: message});
+      var uint8Array = new Uint8Array(message);
+      var charCodes = Array.from(uint8Array);
+      var decodedString = String.fromCharCode(...charCodes);      
+      messages.append({message: decodedString});
       messageList.positionViewAtEnd();
     }
     onSendingFile: function (name, tot, don) {

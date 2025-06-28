@@ -8,16 +8,10 @@
 const qint64 MAX_SOCKET_WRITE_BUFFER_SIZE = 4096;
 const qint64 MSWBS = MAX_SOCKET_WRITE_BUFFER_SIZE;
 
-Socket::Socket(QTcpSocket* socket, QObject *parent) : QObject{parent} ,
-                                                      messageSocket{nullptr},
-                                                      fileSocket{nullptr},
-                                                      sr{&mr},
-                                                      sfr{&fr},
-                                                      writtingMessage{false},
-                                                      writtingFile{false},
-                                                      msw{&mts},
-                                                      fsw{&fts}
-{
+Socket::Socket(QTcpSocket* socket, QObject *parent) :
+  QObject{parent}, messageSocket{nullptr}, fileSocket{nullptr}, sr{&mr},
+  sfr{&fr}, writtingMessage{false}, writtingFile{false}, msw{&mts}, fsw{&fts}
+{  
   mr.open(QIODevice::ReadWrite);
   fr.open(QIODevice::ReadWrite);
   //messageReader.open(QIODevice::ReadWrite);
@@ -28,8 +22,9 @@ Socket::Socket(QTcpSocket* socket, QObject *parent) : QObject{parent} ,
 }
 
 void Socket::disconnectMessageSocket() {
-  if (messageSocket != nullptr && messageSocket->state() == QTcpSocket::ConnectedState)
-  messageSocket->disconnectFromHost();
+  if (messageSocket != nullptr
+      && messageSocket->state() == QTcpSocket::ConnectedState)
+    messageSocket->disconnectFromHost();
 }
 
 void Socket::disconnectFileSocket() {
@@ -37,11 +32,13 @@ void Socket::disconnectFileSocket() {
   fileSocket->disconnectFromHost();
 }
 
-void Socket::connectMessageSocket(const QHostAddress &address, quint16 port, QIODevice::OpenMode mode) {
+void Socket::connectMessageSocket(const QHostAddress &address, quint16 port,
+                                  QIODevice::OpenMode mode) {
   messageSocket->connectToHost(address, port, mode);
 }
 
-void Socket::connectFileSocket(const QHostAddress &address, quint16 port, QIODevice::OpenMode mode) {
+void Socket::connectFileSocket(const QHostAddress &address, quint16 port,
+                               QIODevice::OpenMode mode) {
   fileSocket->connectToHost(address, port, mode);
 }
 
