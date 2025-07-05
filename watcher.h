@@ -9,8 +9,10 @@ class Watcher : public QObject {
   Q_OBJECT
 
   Q_PROPERTY(bool listenning READ isListenning NOTIFY serverStateChanged)
-  Q_PROPERTY(int messageSocketState READ messageSocketState NOTIFY messageSocketStateChanged)
-  Q_PROPERTY(int fileSocketState READ fileSocketState NOTIFY fileSocketStateChanged)
+  Q_PROPERTY(int messageSocketState READ messageSocketState
+             NOTIFY messageSocketStateChanged)
+  Q_PROPERTY(int fileSocketState READ fileSocketState
+             NOTIFY fileSocketStateChanged)
 
 public:
   Watcher(QObject* parent = nullptr);
@@ -20,27 +22,36 @@ public:
   bool isMessageSocketConnected();
   bool isFileSocketConnected();
 
+  QTcpSocket* getMessageSocket() {return messageSocket; }
   int messageSocketState();
   int fileSocketState();
 
   quint16 serverPort() const;
   QHostAddress messageSocketPeerAddress() const;
+  quint16 messageSocketPeerPort() const;
+  QString messageSocketPeerIdentifcation() const;
   QHostAddress fileSocketPeerAddress() const;
+  quint16 fileSocketPeerPort() const;
+  QString fileSocketPeerIdentifcation() const;
 
 public slots:
   void listen(const QByteArray &address, quint16 port);
   void closeServer();
 
-  void connectMessageSocket(const QHostAddress &address, quint16 port, QIODevice::OpenMode mode = QIODevice::ReadWrite);
+  void connectMessageSocket(const QHostAddress &address, quint16 port,
+                            QIODevice::OpenMode mode = QIODevice::ReadWrite);
   
-  void connectMessageSocket(const QByteArray &address, quint16 port, QIODevice::OpenMode mode = QIODevice::ReadWrite);
+  void connectMessageSocket(const QByteArray &address, quint16 port,
+                            QIODevice::OpenMode mode = QIODevice::ReadWrite);
   
-  void connectFileSocket(const QHostAddress &address, quint16 port, QIODevice::OpenMode mode = QIODevice::ReadWrite);
+  void connectFileSocket(const QHostAddress &address, quint16 port,
+                         QIODevice::OpenMode mode = QIODevice::ReadWrite);
   
-  void connectFileSocket(const QByteArray &address, quint16 port, QIODevice::OpenMode mode = QIODevice::ReadWrite);
+  void connectFileSocket(const QByteArray &address, quint16 port,
+                         QIODevice::OpenMode mode = QIODevice::ReadWrite);
 
-  void sendMessage(const QByteArray &message) { socket.sendMessage(message); }
-  void sendFile(const QUrl &src) { socket.sendFile(src); }
+  void sendMessage(const QByteArray &message);
+  void sendFile(const QUrl &src);
 
 private slots:
   void newConnection();
@@ -60,7 +71,6 @@ signals:
   void receivedFile(const QUrl filePath);
   void sendingFile(const QString &fileName, qint64 fileSize, qint64 sentSize);
   void receivingFile(const QString &fileName, qint64 fileSize, qint64 receivedSize);
-
   
 private:
   QTcpServer server;

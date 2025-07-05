@@ -41,12 +41,12 @@ void Watcher::resetMessageSocket(QTcpSocket* socket, bool server) {
     messageSocket->deleteLater();
   }
   messageSocket = socket;
-  if (!server)
+  if (!server) {
     connect(messageSocket, &QTcpSocket::connected,
-            this, &Watcher::setMessageSocket);  
+            this, &Watcher::setMessageSocket);
+  }
   connect(messageSocket, &QTcpSocket::stateChanged,
           this, &Watcher::messageSocketStateChanged);
-  emit messageSocketStateChanged(messageSocket->state());
 }
 
 void Watcher::resetFileSocket(QTcpSocket* socket, bool server) {
@@ -62,18 +62,33 @@ void Watcher::resetFileSocket(QTcpSocket* socket, bool server) {
             this, &Watcher::setFileSocket);
   connect(fileSocket, &QTcpSocket::stateChanged,
           this, &Watcher::fileSocketStateChanged);
-  emit fileSocketStateChanged(fileSocket->state());
 }
 
 bool Watcher::isListenning() { return server.isListening(); }
 
+
 QHostAddress Watcher::messageSocketPeerAddress() const {
   return messageSocket->peerAddress();
+}
+quint16 Watcher::messageSocketPeerPort() const {
+  return messageSocket->peerPort();
+}
+QString Watcher::messageSocketPeerIdentifcation() const {
+  return messageSocket->peerAddress().toString() + "@"
+    + QString::number(messageSocket->peerPort());
 }
 
 QHostAddress Watcher::fileSocketPeerAddress() const {
   return fileSocket->peerAddress();
 }
+quint16 Watcher::fileSocketPeerPort() const {
+  return fileSocket->peerPort();
+}
+QString Watcher::fileSocketPeerIdentifcation() const {
+  return fileSocket->peerAddress().toString() + "@"
+    + QString::number(fileSocket->peerPort());
+}
+
 
 quint16 Watcher::serverPort() const {
   return server.serverPort();
@@ -110,10 +125,12 @@ void Watcher::socketIdentificator() {
       socket->write(CONFIRMMESS);
       resetMessageSocket(socket, true);
       this->socket.setMessageSocket(messageSocket);
+      emit messageSocketStateChanged(messageSocket->state());
     } else if (identificationQueue[socket]->buffer() == FILSI) {
       socket->write(CONFIRMFIL);
       resetFileSocket(socket, true);
       this->socket.setFileSocket(fileSocket);
+      emit fileSocketStateChanged(fileSocket->state());
     } else 
       identificationQueue[socket]->deleteLater();
     identificationQueue.remove(socket);
@@ -148,9 +165,9 @@ void Watcher::confirmMessageSocket() {
 
   if (messageSocketBuffer.size() >= CONFIRMMESS.size()) {
     disconnect(messageSocket, &QTcpSocket::readyRead,
-             this, &Watcher::confirmMessageSocket);
+               this, &Watcher::confirmMessageSocket);
     if (messageSocketBuffer.buffer() == CONFIRMMESS) {
-      socket.setMessageSocket(messageSocket);      
+      socket.setMessageSocket(messageSocket);
     } else {
       messageSocketBuffer.buffer().clear();
       messageSocketBuffer.seek(0);
@@ -181,6 +198,12 @@ void Watcher::confirmFileSocket() {
 int Watcher::messageSocketState() {
   return messageSocket->state();
 }
-int Watcher::fileSocketState() {
-  return fileSocket->state();
+int Watcher::fileSocketState() { return fileSocket->state(); }
+
+void Watcher::sendMessage(const QByteArray &message) {
+  socket.sendMessage(message);
+}
+
+void Watcher::sendFile(const QUrl &src) {
+  socket.sendFile(src);
 }
